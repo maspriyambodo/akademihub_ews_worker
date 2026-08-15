@@ -22,6 +22,12 @@ type contextKey string
 
 const claimsKey contextKey = "user_claims"
 
+// ClaimsContextKey returns the context key used to store UserClaims.
+// Exported so tests can inject fake claims without running the full auth middleware.
+func ClaimsContextKey() interface{} {
+	return claimsKey
+}
+
 // Auth validates the Bearer JWT token and loads user claims into context.
 func Auth(jwtSecret string, db *sqlx.DB) func(http.Handler) http.Handler {
 	secretBytes := []byte(jwtSecret)
@@ -130,6 +136,35 @@ func loadUserClaims(ctx context.Context, db *sqlx.DB, userID int64) (*model.User
 		LIMIT 1
 	`), userID).Scan(&dbSchema)
 	claims.DbSchema = dbSchema
+
+	// Load profile IDs
+	var siswaID int64
+	if err := db.QueryRowContext(ctx, db.Rebind(`SELECT id FROM mst_siswa WHERE sys_user_id = ? AND deleted_at IS NULL LIMIT 1`), userID).Scan(&siswaID); err == nil {
+		claims.SiswaID = &siswaID
+	}
+
+	var guruID int64
+	if err := db.QueryRowContext(ctx, db.Rebind(`SELECT id FROM mst_guru WHERE sys_user_id = ? AND deleted_at IS NULL LIMIT 1`), userID).Scan(&guruID); err == nil {
+		claims.GuruID = &guruID
+	}
+
+	var waliID int64
+	if err := db.QueryRowContext(ctx, db.Rebind(`SELECT id FROM mst_wali_siswa WHERE sys_user_id = ? AND deleted_at IS NULL LIMIT 1`), userID).Scan(&waliID); err == nil {
+		claims.WaliID = &waliID
+		rows, wErr := db.QueryContext(ctx, db.Rebind(`
+			SELECT mst_siswa_id FROM trx_relasi_wali_siswa
+			WHERE mst_wali_siswa_id = ? AND deleted_at IS NULL
+		`), waliID)
+		if wErr == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var sid int64
+				if scanErr := rows.Scan(&sid); scanErr == nil {
+					claims.WaliSiswaIDs = append(claims.WaliSiswaIDs, sid)
+				}
+			}
+		}
+	}
 
 	return claims, nil
 }

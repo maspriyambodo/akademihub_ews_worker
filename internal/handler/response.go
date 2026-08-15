@@ -55,6 +55,10 @@ func jsonBadRequest(w http.ResponseWriter, msg string) {
 	jsonError(w, http.StatusBadRequest, msg)
 }
 
+func jsonForbidden(w http.ResponseWriter) {
+	jsonError(w, http.StatusForbidden, "Forbidden")
+}
+
 func jsonServerError(w http.ResponseWriter, msg string) {
 	jsonError(w, http.StatusInternalServerError, msg)
 }

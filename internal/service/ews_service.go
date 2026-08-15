@@ -161,7 +161,12 @@ func (s *EWSService) GetAlertsBySiswa(ctx context.Context, siswaID int64) ([]mod
 	return s.ewsRepo.GetAlertsBySiswa(ctx, siswaID)
 }
 
-// ResolveAlert resolves a specific EWS alert by ID.
-func (s *EWSService) ResolveAlert(ctx context.Context, id int64) error {
-	return s.ewsRepo.ResolveByID(ctx, id)
+// FindAlertByID returns a single alert by ID.
+func (s *EWSService) FindAlertByID(ctx context.Context, id int64) (*model.TrxEWSAlert, error) {
+	return s.ewsRepo.FindByID(ctx, id)
+}
+
+// ResolveAlert resolves a specific EWS alert by ID and records the resolving user ID.
+func (s *EWSService) ResolveAlert(ctx context.Context, id int64, resolvedByUserID int64) error {
+	return s.ewsRepo.ResolveByID(ctx, id, resolvedByUserID)
 }

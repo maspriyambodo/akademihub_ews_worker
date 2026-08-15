@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
@@ -95,15 +96,40 @@ func (r *EWSRepo) AutoResolve(ctx context.Context, siswaID int64, kategori strin
 	return err
 }
 
-// ResolveByID resolves a specific EWS alert by its primary key.
-func (r *EWSRepo) ResolveByID(ctx context.Context, id int64) error {
+// FindByID fetches a single alert by its primary key.
+func (r *EWSRepo) FindByID(ctx context.Context, id int64) (*model.TrxEWSAlert, error) {
+	var a model.TrxEWSAlert
+	err := r.db.QueryRowxContext(ctx, `
+		SELECT id, mst_siswa_id, kategori, level, pesan, is_resolved, resolved_at, resolved_by, created_at, updated_at
+		FROM trx_ews_alerts
+		WHERE id = $1 AND deleted_at IS NULL
+	`, id).StructScan(&a)
+	if err == sql.ErrNoRows {
+		return nil, ErrNotFound
+	}
+	return &a, err
+}
+
+// ResolveByID resolves a specific EWS alert by primary key and records the resolving actor.
+func (r *EWSRepo) ResolveByID(ctx context.Context, id int64, resolvedByUserID int64) error {
 	res, err := r.db.ExecContext(ctx, `
 		UPDATE trx_ews_alerts
-		SET is_resolved = true, resolved_at = NOW(), updated_at = NOW()
+		SET is_resolved = true,
+		    resolved_at = NOW(),
+		    resolved_by = $2,
+		    updated_at  = NOW()
 		WHERE id = $1 AND is_resolved = false AND deleted_at IS NULL
-	`, id)
+	`, id, resolvedByUserID)
 	if err != nil {
-		return err
+		// Fallback for schema without resolved_by column
+		res, err = r.db.ExecContext(ctx, `
+			UPDATE trx_ews_alerts
+			SET is_resolved = true, resolved_at = NOW(), updated_at = NOW()
+			WHERE id = $1 AND is_resolved = false AND deleted_at IS NULL
+		`, id)
+		if err != nil {
+			return err
+		}
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {
