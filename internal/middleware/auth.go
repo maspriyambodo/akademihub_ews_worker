@@ -47,7 +47,7 @@ func Auth(jwtSecret string, db *sqlx.DB) func(http.Handler) http.Handler {
 					return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 				}
 				return secretBytes, nil
-			}, jwt.WithExpirationRequired())
+			})
 
 			if err != nil || !token.Valid {
 				jsonErr(w, "Token invalid or expired", http.StatusUnauthorized)
@@ -105,7 +105,7 @@ func loadUserClaims(ctx context.Context, db *sqlx.DB, userID int64) (*model.User
 	}
 
 	rows, err := db.QueryContext(ctx, db.Rebind(`
-		SELECT r.name
+		SELECT LOWER(COALESCE(r.code, r.name))
 		FROM sys_user_roles ur
 		JOIN sys_roles r ON r.id = ur.sys_role_id
 		WHERE ur.sys_user_id = ? AND ur.deleted_at IS NULL

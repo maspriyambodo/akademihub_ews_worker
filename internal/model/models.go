@@ -1,6 +1,9 @@
 package model
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // ---- mst_siswa ----
 
@@ -40,8 +43,9 @@ type UserClaims struct {
 }
 
 func (c *UserClaims) HasRole(role string) bool {
+	target := strings.ToLower(role)
 	for _, r := range c.Roles {
-		if r == role {
+		if strings.ToLower(r) == target {
 			return true
 		}
 	}
