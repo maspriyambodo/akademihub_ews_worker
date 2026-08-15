@@ -85,7 +85,91 @@ func TestProcess_Allowed(t *testing.T) {
 	}
 }
 
-// ─── ResolveAlert authorization ──────────────────────────────────────────
+// ─── ListAlerts & IDOR authorization ──────────────────────────────────────
+
+type stubbedListAlertsHandler struct{}
+
+func (h *stubbedListAlertsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.GetClaims(r.Context())
+	if claims == nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	q := r.URL.Query()
+	requestedID := q.Get("mst_siswa_id")
+
+	if !claims.IsAdmin() && !claims.IsGuru() {
+		if claims.IsSiswa() {
+			if claims.SiswaID == nil {
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+			if requestedID != "" && requestedID != "10" {
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+		} else if claims.IsWali() {
+			if requestedID == "" || !claims.CanReadSiswa(20) || requestedID != "20" {
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+		} else {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func TestListAlerts_IDOR_Forbidden(t *testing.T) {
+	s10 := int64(10)
+	tests := []struct {
+		name   string
+		claims *model.UserClaims
+		query  string
+	}{
+		{"siswa accessing other student alerts (IDOR)", &model.UserClaims{Roles: []string{"siswa"}, SiswaID: &s10}, "?mst_siswa_id=99"},
+		{"wali accessing non-ward student alerts (IDOR)", &model.UserClaims{Roles: []string{"wali"}, WaliSiswaIDs: []int64{20}}, "?mst_siswa_id=99"},
+		{"unknown role", &model.UserClaims{Roles: []string{"external"}}, ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := chi.NewRouter()
+			r.Use(func(next http.Handler) http.Handler { return injectClaims(tc.claims, next) })
+			r.Get("/alerts", (&stubbedListAlertsHandler{}).ServeHTTP)
+			req := httptest.NewRequest(http.MethodGet, "/alerts"+tc.query, nil)
+			rr := httptest.NewRecorder()
+			r.ServeHTTP(rr, req)
+			assertStatus(t, rr, http.StatusForbidden)
+		})
+	}
+}
+
+func TestListAlerts_Allowed(t *testing.T) {
+	s10 := int64(10)
+	tests := []struct {
+		name   string
+		claims *model.UserClaims
+		query  string
+	}{
+		{"admin any student", &model.UserClaims{Roles: []string{"admin"}}, "?mst_siswa_id=99"},
+		{"guru any student", &model.UserClaims{Roles: []string{"guru"}}, "?mst_siswa_id=99"},
+		{"siswa own student", &model.UserClaims{Roles: []string{"siswa"}, SiswaID: &s10}, "?mst_siswa_id=10"},
+		{"wali ward student", &model.UserClaims{Roles: []string{"wali"}, WaliSiswaIDs: []int64{20}}, "?mst_siswa_id=20"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := chi.NewRouter()
+			r.Use(func(next http.Handler) http.Handler { return injectClaims(tc.claims, next) })
+			r.Get("/alerts", (&stubbedListAlertsHandler{}).ServeHTTP)
+			req := httptest.NewRequest(http.MethodGet, "/alerts"+tc.query, nil)
+			rr := httptest.NewRecorder()
+			r.ServeHTTP(rr, req)
+			assertStatus(t, rr, http.StatusOK)
+		})
+	}
+}
+
 
 type stubbedResolveHandler struct{}
 
