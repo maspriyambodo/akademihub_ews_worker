@@ -225,3 +225,36 @@ func (h *EWSHandler) ResolveAlert(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonOK(w, nil, "alert resolved")
 }
+
+// GetAlert GET /api/v1/ews/{id} — single EWS alert by ID.
+// Permission: caller must have CanReadSiswa access to the alert's student.
+func (h *EWSHandler) GetAlert(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.GetClaims(r.Context())
+	if claims == nil {
+		jsonForbidden(w)
+		return
+	}
+
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		jsonBadRequest(w, "invalid id")
+		return
+	}
+
+	alert, err := h.svc.FindAlertByID(r.Context(), id)
+	if err == repository.ErrNotFound {
+		jsonNotFound(w, "alert tidak ditemukan")
+		return
+	}
+	if err != nil {
+		jsonServerError(w, err.Error())
+		return
+	}
+
+	if !claims.CanReadSiswa(alert.MstSiswaID) {
+		jsonForbidden(w)
+		return
+	}
+	jsonOK(w, alert, "OK")
+}
+

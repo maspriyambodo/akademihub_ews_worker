@@ -66,6 +66,7 @@ func main() {
 			r.Get("/alerts", ewsH.ListAlerts)
 			r.Get("/alerts/{siswaId}", ewsH.GetAlertsBySiswa)
 			r.Patch("/alerts/{id}/resolve", ewsH.ResolveAlert)
+			r.Get("/{id}", ewsH.GetAlert)
 		})
 	})
 
